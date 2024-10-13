@@ -1,0 +1,328 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>모션 아트 미러(Motion Art Mirror)</title>
+    <style>
+        body {
+            margin: 0;
+            overflow: hidden;
+            font-family: monospace;
+            background-color: black;
+            display: flex;
+            height: 100vh;
+            position: relative;
+            padding: 10px;
+        }
+
+        #ascii {
+            white-space: pre-wrap;
+            margin: auto;
+            font-size: 1.2em; /* 글자 크기 1.2배 확대 */
+            line-height: 1.2em;
+            overflow: hidden;
+            color: white;
+            text-align: center;
+        }
+
+        video {
+            display: none;
+        }
+
+        .controls {
+            position: absolute;
+            top: 10px;
+            left: 10px;
+            display: flex;
+            flex-direction: column;
+        }
+
+        input[type="text"] {
+            margin-bottom: 10px;
+            font-size: 1em;
+            padding: 5px;
+            background-color: gray; /* 입력창 배경색 노란색으로 변경 */
+            color: yellow;
+        }
+
+        input[type="range"] {
+            margin-top: 2px;
+            accent-color: yellow; /* 슬라이더 색상 빨강으로 변경 */
+            background-color: gray; /* 남는 부분 회색으로 설정 */
+            margin-bottom: 10px;
+        }
+
+        label {
+            margin: 5px 0;
+            color: blue;
+            font-size: 1rem;
+            font-family: 'Pretendard-Regular';
+        }
+
+        #message {
+            position: absolute;
+            top: 50%;
+            left: 50%;
+            transform: translate(-50%, -50%);
+            color: red; /* 문구 색상을 빨간색으로 설정 */
+            font-size: 5.5rem;
+            font-family: 'Pretendard-Medium';
+            text-align: center;
+            display: none;
+            z-index: 10;
+        }
+
+        @font-face {
+            font-family: 'Pretendard-Medium';
+            src: url('https://cdn.jsdelivr.net/gh/Project-Noonnu/noonfonts_2107@1.1/Pretendard-Bold.woff') format('woff');
+            font-weight: 500;
+            font-style: normal;
+        }
+
+        @font-face {
+            font-family: 'Pretendard-Regular';
+            src: url('https://cdn.jsdelivr.net/gh/Project-Noonnu/noonfonts_2107@1.1/Pretendard-Regular.woff') format('woff');
+            font-weight: 400;
+            font-style: normal;
+        }
+
+        #logo {
+            position: absolute;
+            top: 10px;
+            left: 50%;
+            transform: translateX(-50%);
+            width: 300px;
+            z-index: 10;
+        }
+    </style>
+</head>
+<body>
+    <div class="controls" style="top: 50px;left:2vw">
+        <label for="charSetInput">글자 추가하기</label>
+        <input type="text" id="charSetInput" placeholder="아스키 아트 문자 입력" value=" .:-+#@!">
+        <label for="contrastRange">대비 조정하기</label>
+        <input type="range" id="contrastRange" min="1" max="10" value="5" step="1">
+        <label for="fontSizeRange">글자 크기 조정하기</label>
+        <input type="range" id="fontSizeRange" min="0.5" max="2.2" value="1.7" step="0.1">
+    </div>
+    <img id="logo" src="logo.png" alt="Logo">
+
+    <video id="webcam" autoplay playsinline></video>
+    <pre id="ascii"></pre>
+    <div id="message">움직○lパㅔ요!<br>화면○l バrㄹΓ집LI⊂ト.</div>
+
+    <script>
+        const video = document.getElementById('webcam');
+        const asciiContainer = document.getElementById('ascii');
+        const charSetInput = document.getElementById('charSetInput');
+        const contrastRange = document.getElementById('contrastRange');
+        const fontSizeRange = document.getElementById('fontSizeRange');
+        const message = document.getElementById('message');
+
+        let charSet = charSetInput.value;
+        let previousImageData = null;
+        let asciiChars = [];
+        let trails = [];
+        let lastMovementTime = Date.now();
+        let creationStartTime = Date.now();
+
+        const motionThreshold = 50;
+        const creationDuration = 2000;
+        const maxTrailDuration = 5000;
+        const removeInactiveAfter = 8000;
+
+        // 문구를 2초 전에 빨간색으로 표시하는 조건
+        function showMessageIfFewAsciiRemain(now) {
+            if (now - lastMovementTime > removeInactiveAfter - 3500) {
+                message.style.display = 'block';
+            } else {
+                message.style.display = 'none';
+            }
+        }
+
+        // 문자 집합 업데이트
+        charSetInput.addEventListener('input', () => {
+            charSet = charSetInput.value || ' .:-+#@!';
+        });
+
+        // 글자 크기 조정
+        fontSizeRange.addEventListener('input', () => {
+            const now = Date.now();
+            asciiChars.forEach(({ element, x, y }) => {
+                trails.push({ x, y, timestamp: now, char: element.textContent });
+            });
+            asciiContainer.style.fontSize = `${fontSizeRange.value}em`;
+        });
+
+        // 웹캠 설정
+        navigator.mediaDevices.getUserMedia({ video: true })
+            .then(stream => {
+                video.srcObject = stream;
+                video.play();
+                video.addEventListener('play', () => updateAscii());
+            })
+            .catch(err => {
+                console.error('Webcam access denied:', err);
+                asciiContainer.textContent = 'Webcam access is required to display ASCII art.';
+            });
+
+        // 프레임 업데이트
+        function updateAscii() {
+            const canvas = document.createElement('canvas');
+            const context = canvas.getContext('2d');
+
+            const width = 80;
+            const height = 45;
+
+            canvas.width = width;
+            canvas.height = height;
+
+            function renderFrame() {
+                context.drawImage(video, 0, 0, width, height);
+                const imageData = context.getImageData(0, 0, width, height);
+
+                const asciiFrame = generateAscii(imageData);
+                displayAsciiWithEffects(asciiFrame);
+
+                requestAnimationFrame(renderFrame);
+            }
+
+            renderFrame();
+        }
+
+        // 아스키 생성
+        function generateAscii(imageData) {
+            const pixels = imageData.data;
+            const width = imageData.width;
+            const height = imageData.height;
+
+            let asciiFrame = '';
+            const currentImageData = [];
+
+            for (let y = 0; y < height; y++) {
+                let line = '';
+                for (let x = 0; x < width; x++) {
+                    const offset = (y * width + x) * 4;
+                    const r = pixels[offset];
+                    const g = pixels[offset + 1];
+                    const b = pixels[offset + 2];
+
+                    const contrast = contrastRange.value;
+                    const brightness = ((r + g + b) / 3) * (contrast / 5);
+                    const clampedBrightness = Math.min(Math.max(brightness, 0), 255);
+                    const charIndex = Math.floor((clampedBrightness / 255) * (charSet.length - 1));
+                    line += charSet[charIndex];
+
+                    currentImageData.push(brightness);
+                }
+                asciiFrame += line + '\n';
+            }
+
+            detectMotion(currentImageData, width, height);
+            previousImageData = currentImageData;
+            return asciiFrame;
+        }
+
+        // 움직임 감지 및 잔상 저장
+        function detectMotion(currentImageData, width, height) {
+            const now = Date.now();
+            let hasMotion = false;
+
+            if (!previousImageData) return;
+
+            for (let y = 0; y < height; y++) {
+                for (let x = 0; x < width; x++) {
+                    const index = y * width + x;
+                    const brightnessDiff = Math.abs(currentImageData[index] - previousImageData[index]);
+
+                    if (brightnessDiff > motionThreshold) {
+                        trails.push({ x, y, timestamp: now });
+                        hasMotion = true;
+                    }
+                }
+            }
+
+            trails = trails.filter(trail => now - trail.timestamp < maxTrailDuration);
+            lastMovementTime = hasMotion ? now : lastMovementTime;
+        }
+
+        // 아스키 표시 효과: 중앙에서 퍼지며 생성되고, 색상 변화
+        function displayAsciiWithEffects(asciiFrame) {
+            const lines = asciiFrame.split('\n');
+            asciiContainer.innerHTML = '';
+
+            const now = Date.now();
+            const animationProgress = Math.min((now - creationStartTime) / creationDuration, 1);
+
+            asciiChars = [];
+            const centerX = Math.floor(80 / 2);
+            const centerY = Math.floor(45 / 2);
+
+            lines.forEach((line, y) => {
+                const div = document.createElement('div');
+                line.split('').forEach((char, x) => {
+                    const distanceFromCenter = Math.sqrt(Math.pow(centerX - x, 2) + Math.pow(centerY - y, 2));
+                    const revealDistance = animationProgress * Math.max(centerX, centerY);
+
+                    const span = document.createElement('span');
+                    span.textContent = char;
+
+                    // 아스키 아트를 흔들리게 하는 효과
+                    const shakeAmount = detectShakeAmount(trails, x, y);
+                    span.style.transform = `translate(${shakeAmount.x}px, ${shakeAmount.y}px)`;
+
+                    if (distanceFromCenter <= revealDistance) {
+                        const trail = trails.find(t => t.x === x && t.y === y);
+                        const charAge = trail ? now - trail.timestamp : now - creationStartTime;
+
+                        const color = getColorBasedOnTime(charAge);
+                        span.style.color = color;
+                    } else {
+                        span.style.visibility = 'hidden';
+                    }
+
+                    asciiContainer.appendChild(span);
+                    asciiChars.push({ element: span, x, y });
+                });
+                asciiContainer.appendChild(div);
+            });
+
+            removeInactiveAscii(now);
+            showMessageIfFewAsciiRemain(now);  // 새로운 메시지 조건 적용
+        }
+
+        // 흔들리게 하는 효과를 결정
+        function detectShakeAmount(trails, x, y) {
+            let shakeX = 0;
+            let shakeY = 0;
+            trails.forEach(trail => {
+                if (trail.x === x && trail.y === y) {
+                    shakeX = (Math.random() - 0.5) * 5; // -2.5px ~ 2.5px
+                    shakeY = (Math.random() - 0.5) * 5; // -2.5px ~ 2.5px
+                }
+            });
+            return { x: shakeX, y: shakeY };
+        }
+
+        // 시간에 따라 색상 변경
+        function getColorBasedOnTime(age) {
+            if (age < 2000) return 'red'; 
+            if (age < 4000) return 'yellow';
+            if (age < 6000) return 'blue';
+            if (age < 8000) return 'black';
+            return 'transparent';
+        }
+
+        // 비활성 아스키 아트 제거
+        function removeInactiveAscii(now) {
+            if (now - lastMovementTime > removeInactiveAfter) {
+                asciiChars.forEach(({ element }) => {
+                    element.style.visibility = 'hidden';
+                });
+            }
+        }
+    </script>
+</body>
+</html>
+
