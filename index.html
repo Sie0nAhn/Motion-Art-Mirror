@@ -141,12 +141,12 @@
             }
         }
 
-        // 문자 집합 업데이트
+       
         charSetInput.addEventListener('input', () => {
             charSet = charSetInput.value || ' .:-+#@!';
         });
 
-        // 글자 크기 조정
+        
         fontSizeRange.addEventListener('input', () => {
             const now = Date.now();
             asciiChars.forEach(({ element, x, y }) => {
@@ -155,7 +155,7 @@
             asciiContainer.style.fontSize = `${fontSizeRange.value}em`;
         });
 
-        // 웹캠 설정
+        
         navigator.mediaDevices.getUserMedia({ video: true })
             .then(stream => {
                 video.srcObject = stream;
@@ -167,7 +167,7 @@
                 asciiContainer.textContent = 'Webcam access is required to display ASCII art.';
             });
 
-        // 프레임 업데이트
+       
         function updateAscii() {
             const canvas = document.createElement('canvas');
             const context = canvas.getContext('2d');
@@ -191,7 +191,7 @@
             renderFrame();
         }
 
-        // 아스키 생성
+       
         function generateAscii(imageData) {
             const pixels = imageData.data;
             const width = imageData.width;
@@ -224,7 +224,7 @@
             return asciiFrame;
         }
 
-        // 움직임 감지 및 잔상 저장
+        
         function detectMotion(currentImageData, width, height) {
             const now = Date.now();
             let hasMotion = false;
@@ -247,7 +247,7 @@
             lastMovementTime = hasMotion ? now : lastMovementTime;
         }
 
-        // 아스키 표시 효과: 중앙에서 퍼지며 생성되고, 색상 변화
+        
         function displayAsciiWithEffects(asciiFrame) {
             const lines = asciiFrame.split('\n');
             asciiContainer.innerHTML = '';
@@ -292,7 +292,7 @@
             showMessageIfFewAsciiRemain(now);  // 새로운 메시지 조건 적용
         }
 
-        // 흔들리게 하는 효과를 결정
+        
         function detectShakeAmount(trails, x, y) {
             let shakeX = 0;
             let shakeY = 0;
@@ -305,7 +305,7 @@
             return { x: shakeX, y: shakeY };
         }
 
-        // 시간에 따라 색상 변경
+        
         function getColorBasedOnTime(age) {
             if (age < 2000) return 'red'; 
             if (age < 4000) return 'yellow';
@@ -314,7 +314,7 @@
             return 'transparent';
         }
 
-        // 비활성 아스키 아트 제거
+        
         function removeInactiveAscii(now) {
             if (now - lastMovementTime > removeInactiveAfter) {
                 asciiChars.forEach(({ element }) => {
